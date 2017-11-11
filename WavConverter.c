@@ -141,14 +141,14 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
           }
     }
 
-    for (int index = optind; index < argc; index++) {
-        printf ("Non-option argument %s\n", argv[index]);
-
-        size_t optlen = strlen(argv[index]);
-        memcpy(params->input_dir, argv[index], MIN(optlen, PATHNAME_MAX_SIZE - 1));
+    
+    if(optind < argc) { 
+        // TODO: Consider allowing multiple input dirs using a vector
+        size_t optlen = strlen(argv[optind]);
+        memcpy(params->input_dir, argv[optind], MIN(optlen, PATHNAME_MAX_SIZE - 1));
         params->input_dir[optlen] = 0;
 
-        if(sync_out_dir) /* We want to sync these values if -o isn't explicitly set */
+        if(sync_out_dir) // We want to sync input & output dirs if -o isn't explicitly set
             memcpy(params->output_dir, params->input_dir, PATHNAME_MAX_SIZE);
     }
         
