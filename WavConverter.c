@@ -23,6 +23,9 @@ Requirements:
 #include "getopt/getopt.h"
 #include "system_shims.h"
 
+
+#include <pthread.h>
+
 #define PROGRAM "WavConverter"
 #define VERSION "v0.1"
 #define LICENSE "Some license copyright (C) 2017"
@@ -59,6 +62,15 @@ typedef struct parameters {
     int   quality_lvl;
     int   max_cores;
 } parameters;
+
+
+typedef struct thread_args {
+    int thread_id;
+} thread_args;
+
+int done = 0;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
 /*****************************************************************************************
  * Functions
@@ -155,6 +167,20 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
   
 }
 
+void *routine(void *arg)
+{
+    thread_args *args = arg;
+    sleep(getNumCPUs() - args->thread_id);
+
+    pthread_mutex_lock(&mutex);
+    done++;
+    pthread_cond_signal(&cond); 
+    pthread_mutex_unlock(&mutex);
+
+    free(arg); // Avoid a memory leak
+    return 0;
+}
+
 /*****************************************************************************************
  * Main
  ****************************************************************************************/
@@ -186,6 +212,31 @@ int main (int argc, char *argv[]) {
                          .quality_lvl = %i,\n\
                          .max_cores   = %i };\n", params.input_dir, params.output_dir, params.quality_lvl, params.max_cores);
     
+
+    const int max_threads = params.max_cores;
+
+    for (int i = 0; i < max_threads; i++) {
+        thread_args *args = malloc(sizeof(thread_args));
+        args->thread_id = i;
+
+        pthread_t tid;
+        pthread_create(&tid, NULL, routine, args);
+        printf("created: %i\n", args->thread_id);
+    }
+
+    // we're going to test "done" so we need the mutex for safety
+    pthread_mutex_lock( &mutex );
+
+    while(done < max_threads) {
+        
+        printf("Waiting on cond\n");
+        pthread_cond_wait( &cond, &mutex ); 
+        printf("%i of %i threads are done\n", done, max_threads);
+        /* we go around the loop with the lock held */
+    }
+  
+    pthread_mutex_unlock( & mutex );
+
     exit(EXIT_SUCCESS);
 
     /*
