@@ -137,7 +137,6 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
             }
             
             default:
-                printf("Hello %s\n", optarg);
                 break;
           }
     }
