@@ -28,20 +28,19 @@
     #define TID_T HANDLE
     #define THREAD_ATTR_T LPSECURITY_ATTRIBUTES
 
+    #define mutex_init(mutex)    InitializeCriticalSection((mutex))
+    #define mutex_destroy(mutex) DeleteCriticalSection((mutex))
 
-    #define mutex_init(mutex) InitializeCriticalSection(&(mutex))
-    #define mutex_destroy(mutex) DeleteCriticalSection(&(mutex))
+    #define cond_init(cv)        InitializeConditionVariable((cv))
+    #define cond_destroy(cv)     ()
 
-    #define mutex_lock(mutex) EnterCriticalSection(&(m))
-    #define mutex_unlock(mutex) LeaveCriticalSection(&(m))
+    #define mutex_lock(mutex)    EnterCriticalSection((mutex))
+    #define mutex_unlock(mutex)  LeaveCriticalSection((mutex))
 
-    #define cond_init(cv) InitializeConditionVariable(&(cv))
-    #define cond_destroy(cv) ()
+    #define cond_signal(cv)      WakeConditionVariable((cv))
+    #define cond_wait(cv, mutex) SleepConditionVariableCS((cv), (mutex), INFINITE)
 
-    #define cond_signal(cv) WakeConditionVariable(&(cv))
-    #define cond_wait(cv, mutex) SleepConditionVariableCS(&(cv), &(mutex), INFINITE)
-
-    #define create_thread(t, func, arg) t = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)func, arg, 0, NULL)
+    #define create_thread(tid, f, arg) tid = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)f, arg, 0, NULL)
 
 /*****************************************************************************************
  * POSIX Defines
@@ -64,28 +63,22 @@
     #define TID_T pthread_t
     #define THREAD_ATTR_T pthread_attr_t
 
-    #define mutex_init(mutex) pthread_mutex_init(&(mutex), NULL)
-    #define mutex_destroy(mutex) pthread_mutex_destroy(&(mutex))
+    #define mutex_init(mutex)    pthread_mutex_init((mutex), NULL)
+    #define mutex_destroy(mutex) pthread_mutex_destroy((mutex))
 
-    #define mutex_lock(mutex) pthread_mutex_lock(&(m))
-    #define mutex_unlock(mutex) pthread_mutex_unlock(&(m))
+    #define cond_init(cv)        pthread_cond_init((cv), NULL)
+    #define cond_destroy(cv)     pthread_cond_destroy((cv))
 
-    #define cond_signal(cv) pthread_cond_signal(&(cv))
-    #define cond_wait(cv, mutex) pthread_cond_wait(&(cv), &(mutex))
+    #define mutex_lock(mutex)    pthread_mutex_lock((mutex))
+    #define mutex_unlock(mutex)  pthread_mutex_unlock((mutex))
 
-    #define create_thread(t, func, arg) pthread_create(&t, NULL, func, arg)
+    #define cond_signal(cv)      pthread_cond_signal((cv))
+    #define cond_wait(cv, mutex) pthread_cond_wait((cv), (mutex))
 
-    /*void mutex_init(MUTEX_T *mutex) {
-        pthread_mutex_init(mutex, NULL);
-    }*/
+    #define create_thread(tid, f, arg) pthread_create(&(tid), NULL, f, arg)
+
 
 #endif
-
-/*! Gets the current working directory from the filesystem in a semi-portable way 
- *  on both Windows and Linux systems 
- */
-// char *getCwd(char *buf, size_t size);
-
 
 /*****************************************************************************************
  * Defines that really should be in the standard library
