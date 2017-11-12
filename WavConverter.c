@@ -60,6 +60,15 @@ typedef struct parameters {
     int   max_cores;
 } parameters;
 
+
+typedef struct thread_args {
+    int thread_id;
+} thread_args;
+
+int done = 0;
+MUTEX_T mutex;
+COND_T cond_var;
+
 /*****************************************************************************************
  * Functions
  ****************************************************************************************/
@@ -155,6 +164,20 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
   
 }
 
+void *routine(void *arg)
+{
+    thread_args *args = arg;
+    sleep(getNumCPUs() - args->thread_id);
+
+    mutex_lock(&mutex);
+    done++;
+    cond_signal(&cond_var); 
+    mutex_unlock(&mutex);
+
+    free(arg); // Avoid a memory leak
+    return 0;
+}
+
 /*****************************************************************************************
  * Main
  ****************************************************************************************/
@@ -186,6 +209,37 @@ int main (int argc, char *argv[]) {
                          .quality_lvl = %i,\n\
                          .max_cores   = %i };\n", params.input_dir, params.output_dir, params.quality_lvl, params.max_cores);
     
+
+    const int max_threads = params.max_cores;
+
+    mutex_init(&mutex);
+    cond_init(&cond_var);
+
+    for (int i = 0; i < max_threads; i++) {
+        thread_args *args = malloc(sizeof(thread_args));
+        args->thread_id = i;
+
+        TID_T tid;
+        create_thread(tid, routine, args);
+        printf("created: %i\n", args->thread_id);
+    }
+
+    // we're going to test "done" so we need the mutex for safety
+    mutex_unlock(&mutex);
+
+    while(done < max_threads) {
+        
+        printf("Waiting on cond\n");
+        cond_wait(&cond_var, &mutex); 
+        printf("%i of %i threads are done\n", done, max_threads);
+        /* we go around the loop with the lock held */
+    }
+  
+    mutex_unlock(&mutex);
+
+    mutex_destroy(&mutex);
+    cond_destroy(&cond_var);
+
     exit(EXIT_SUCCESS);
 
     /*
