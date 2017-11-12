@@ -185,7 +185,7 @@ void *routine(void *arg)
 
 	free(args->in_file);
 	free(args->out_file);
-    free(args); // Avoid a memory leak
+    free(args); // Avoid a temporary memory leak
 	return 0;
 }
 
