@@ -63,11 +63,19 @@ typedef struct parameters {
 
 typedef struct thread_args {
     int thread_id;
+	char *in_file;
+	char *out_file;
 } thread_args;
 
-int done = 0;
-MUTEX_T mutex;
-COND_T cond_var;
+
+
+/*! This struct is an alternative to a semaphore, which would be less clear here */
+struct sync_block {
+	MUTEX_T mutex;
+	COND_T cond_var;
+	int counter;
+} sem = { .counter = 0 };
+
 
 /*****************************************************************************************
  * Functions
@@ -167,15 +175,18 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
 void *routine(void *arg)
 {
     thread_args *args = arg;
-    sleep(getNumCPUs() - args->thread_id);
+    //Sleep(1000*(getNumCPUs() - args->thread_id));
+	//printf("Thread %i reporting in\n", args->thread_id);
+    mutex_lock(&sem.mutex);
+    sem.counter++;
+    cond_signal(&sem.cond_var); 
+    mutex_unlock(&sem.mutex);
 
-    mutex_lock(&mutex);
-    done++;
-    cond_signal(&cond_var); 
-    mutex_unlock(&mutex);
 
-    free(arg); // Avoid a memory leak
-    return 0;
+	free(args->in_file);
+	free(args->out_file);
+    free(args); // Avoid a memory leak
+	return 0;
 }
 
 /*****************************************************************************************
@@ -209,38 +220,74 @@ int main (int argc, char *argv[]) {
                          .quality_lvl = %i,\n\
                          .max_cores   = %i };\n", params.input_dir, params.output_dir, params.quality_lvl, params.max_cores);
     
+	int len;
+	struct dirent *pDirent;
+	DIR *cwd;
+
+	cwd = opendir(params.input_dir);
+	if (cwd == NULL) {
+		printf("Cannot open directory '%s'\n", params.input_dir);
+		return 1;
+	}
+
+	while ((pDirent = readdir(cwd)) != NULL) {
+		printf("[%s]\n", pDirent->d_name);
+		if (strstr(pDirent->d_name, ".wav") != NULL) {
+			char *filepath = calloc(strlen(params.input_dir) + strlen(pDirent->d_name) + 2, 1);
+
+			strcat(filepath, params.input_dir);
+			strcat(filepath, "\\");
+			strcat(filepath, pDirent->d_name);
+
+			const int real_strlen = strlen(filepath);
+
+			printf("Filepath %s\n", filepath);
+			
+			FILE *pcm = fopen(filepath, "rb");
+			if (pcm != NULL) {
+				printf("File %s opened!\n", pDirent->d_name);
+				fclose(pcm);
+			}
+			else {
+				printf("File could not be opened\n");
+			}
+
+			free(filepath);
+		}
+	}
+	closedir(cwd);
 
     const int max_threads = params.max_cores;
 
-    mutex_init(&mutex);
-    cond_init(&cond_var);
+	mutex_init(&sem.mutex);
+	cond_init(&sem.cond_var);
 
     for (int i = 0; i < max_threads; i++) {
-        thread_args *args = malloc(sizeof(thread_args));
+		thread_args *args = malloc(sizeof(thread_args));
         args->thread_id = i;
+		args->in_file = calloc(PATHNAME_MAX_SIZE, 1);
+		args->out_file = calloc(PATHNAME_MAX_SIZE, 1);
 
         TID_T tid;
         create_thread(tid, routine, args);
         printf("created: %i\n", args->thread_id);
     }
 
-    // we're going to test "done" so we need the mutex for safety
-    mutex_unlock(&mutex);
+    mutex_unlock(&sem.mutex);
 
-    while(done < max_threads) {
-        
-        printf("Waiting on cond\n");
-        cond_wait(&cond_var, &mutex); 
-        printf("%i of %i threads are done\n", done, max_threads);
-        /* we go around the loop with the lock held */
+    while(sem.counter < max_threads) {
+        cond_wait(&sem.cond_var, &sem.mutex); 
+        printf("%i of %i threads are done\n", sem.counter, max_threads);
     }
   
-    mutex_unlock(&mutex);
+	printf("All %i threads finished\n", sem.counter);
+    mutex_unlock(&sem.mutex);
 
-    mutex_destroy(&mutex);
-    cond_destroy(&cond_var);
+    mutex_destroy(&sem.mutex);
+    cond_destroy(&sem.cond_var);
 
     exit(EXIT_SUCCESS);
+
 
     /*
     for(int i = 1; i < argc; i++) {

@@ -7,6 +7,7 @@
  * MSVC Defines
  ****************************************************************************************/
 #if defined(_MSC_VER) /* Then we're building with MSVC */
+	#include <Synchapi.h>
     #include <direct.h> 
     #define getCwd _getcwd
 
@@ -31,8 +32,8 @@
     #define mutex_init(mutex)    InitializeCriticalSection((mutex))
     #define mutex_destroy(mutex) DeleteCriticalSection((mutex))
 
-    #define cond_init(cv)        InitializeConditionVariable((cv))
-    #define cond_destroy(cv)     ()
+	#define cond_init(cv)        InitializeConditionVariable((cv))
+    #define cond_destroy(cv)     
 
     #define mutex_lock(mutex)    EnterCriticalSection((mutex))
     #define mutex_unlock(mutex)  LeaveCriticalSection((mutex))
@@ -41,6 +42,9 @@
     #define cond_wait(cv, mutex) SleepConditionVariableCS((cv), (mutex), INFINITE)
 
     #define create_thread(tid, f, arg) tid = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)f, arg, 0, NULL)
+
+
+	
 
 /*****************************************************************************************
  * POSIX Defines
