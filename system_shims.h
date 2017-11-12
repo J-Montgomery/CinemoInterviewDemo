@@ -3,7 +3,7 @@
 #define SYSTEM_SHIMS_H_
 #if defined(_MSC_VER) /* Then we're building with MSVC */
     #include <direct.h> 
-    #define getCwd __getcwd
+    #define getCwd _getcwd
 
     #include <windows.h>
     int getNumCPUs(void) {
