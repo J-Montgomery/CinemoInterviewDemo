@@ -114,6 +114,7 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="filesystem_access.c" />
     <ClCompile Include="getopt\getopt.c" />
     <ClCompile Include="system_shims.c" />
     <ClCompile Include="WavConverter.c" />

@@ -22,6 +22,7 @@ Requirements:
 
 #include "getopt/getopt.h"
 #include "system_shims.h"
+#include "filesystem_access.h"
 
 #define PROGRAM "WavConverter"
 #define VERSION "v0.1"
@@ -53,9 +54,11 @@ enum quality_lvl {
     OPTIMIZE_SPEED   = 2
 };
 
+
 typedef struct parameters {
-    char *input_dir;
-    char *output_dir;
+    filepath input_dir;
+    filepath output_dir;
+
     int   quality_lvl;
     int   max_cores;
 } parameters;
@@ -63,22 +66,38 @@ typedef struct parameters {
 
 typedef struct thread_args {
     int thread_id;
-	char *in_file;
-	char *out_file;
+    filepath in_file;
+    filepath out_file;
 } thread_args;
 
 
 
 /*! This struct is an alternative to a semaphore, which would be less clear here */
 struct sync_block {
-	MUTEX_T mutex;
-	COND_T cond_var;
-	int counter;
-} sem = { .counter = 0 };
+    MUTEX_T mutex;
+    COND_T cond_var;
+    int counter;
+};
+
+struct sync_block sem = { .counter = 0 };
 
 
 /*****************************************************************************************
- * Functions
+* Function prototypes
+****************************************************************************************/
+/* Argument parsing protytypes*/
+void usage(void);
+void version(char *name, char *version, char *license, char *author);
+void parseOpts(parameters *params, int argc, char *argv[]);
+
+
+/* Misc. function prototypes */
+
+void *convert_wav(void *arg);
+
+
+/*****************************************************************************************
+ * Parameter parsing Functions
  ****************************************************************************************/
 void usage(void) {
     printf("\
@@ -124,15 +143,12 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
                 break;
             case 'o':
             {
-                size_t optlen = strlen(optarg);
-                memcpy(params->output_dir, optarg, MIN(optlen, PATHNAME_MAX_SIZE - 1));
-                params->output_dir[optlen] = 0;
-
+                filepath opt_dir = {optarg, strlen(optarg)};
+                params->output_dir = set_path(params->output_dir, opt_dir);
                 sync_out_dir = 0;
                 break;
             }
             case 'O':
-            {
                 if(strcmp(optarg, "quality") == 0)
                     params->quality_lvl = OPTIMIZE_QUALITY;
                 else if(strcmp(optarg, "size") == 0)
@@ -144,7 +160,6 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
                     exit(EXIT_FAILURE);
                 }
                 break;
-            }
             case 'n':
             {
                 int max_threads = atoi(optarg);
@@ -153,6 +168,15 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
                 break;
             }
             
+            case '?': 
+            {
+                int ind = optind - (int)(optopt == 0); // If given unknown short commands (e.g. -abc), optind will remain 
+                                                       // indexed at the current index. Decrement optind otherwise. 
+                printf("Unknown option %s\n", argv[ind]);
+                exit(EXIT_FAILURE);
+                break;
+            }
+
             default:
                 break;
           }
@@ -161,32 +185,35 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
     
     if(optind < argc) { 
         // TODO: Consider allowing multiple input dirs using a vector
-        size_t optlen = strlen(argv[optind]);
-        memcpy(params->input_dir, argv[optind], MIN(optlen, PATHNAME_MAX_SIZE - 1));
-        params->input_dir[optlen] = 0;
+        filepath opt_dir = { argv[optind], strlen(argv[optind]) };
+        params->input_dir = set_path(params->input_dir, opt_dir);
 
         if(sync_out_dir) // We want to sync input & output dirs if -o isn't explicitly set
-            memcpy(params->output_dir, params->input_dir, PATHNAME_MAX_SIZE);
+            params->output_dir = set_path(params->output_dir, params->input_dir);
     }
         
   
 }
 
-void *routine(void *arg)
+/*****************************************************************************************
+* Misc. Functions
+****************************************************************************************/
+
+
+
+void *convert_wav(void *arg)
 {
     thread_args *args = arg;
-    //Sleep(1000*(getNumCPUs() - args->thread_id));
-	//printf("Thread %i reporting in\n", args->thread_id);
+
     mutex_lock(&sem.mutex);
     sem.counter++;
     cond_signal(&sem.cond_var); 
     mutex_unlock(&sem.mutex);
 
-
-	free(args->in_file);
-	free(args->out_file);
+    free(args->in_file.path);
+    free(args->out_file.path);
     free(args); // Avoid a temporary memory leak
-	return 0;
+    return 0;
 }
 
 /*****************************************************************************************
@@ -196,16 +223,19 @@ int main (int argc, char *argv[]) {
     
     executable_name = argv[0];
 
-    char *output_dir = malloc(256);
-    output_dir = getCwd(output_dir, PATHNAME_MAX_SIZE);
+    parameters params = { .input_dir   = (filepath) {NULL, 0},
+                          .output_dir  = (filepath) {NULL, 0},
+                          .quality_lvl = OPTIMIZE_QUALITY,
+                          .max_cores   = getNumCPUs() };
 
-    parameters params = {.input_dir   = calloc(PATHNAME_MAX_SIZE, 1), 
-                         .output_dir  = calloc(PATHNAME_MAX_SIZE, 1),
-                         .quality_lvl = OPTIMIZE_QUALITY,
-                         .max_cores   = getNumCPUs() };
+    params.input_dir.path = getCwd(NULL, INITIAL_SYS_PATH_LEN);
+    params.input_dir.path_len = strlen(params.input_dir.path);
 
-    params.input_dir = getCwd(params.input_dir, PATHNAME_MAX_SIZE - 1);
-    memcpy(params.output_dir, params.input_dir, PATHNAME_MAX_SIZE - 1);
+    params.output_dir.path_len = max(params.input_dir.path_len, INITIAL_SYS_PATH_LEN);
+    params.output_dir.path = malloc(params.output_dir.path_len);
+
+    // Initialize output dir in case input dir is not specified on CLI
+    memcpy(params.output_dir.path, params.input_dir.path, params.input_dir.path_len);
 
     if(argc == 1) {
         usage();
@@ -218,58 +248,56 @@ int main (int argc, char *argv[]) {
     parameters params = {.input_dir   = %s,\n\
                          .output_dir  = %s,\n\
                          .quality_lvl = %i,\n\
-                         .max_cores   = %i };\n", params.input_dir, params.output_dir, params.quality_lvl, params.max_cores);
+                         .max_cores   = %i };\n", params.input_dir.path, params.output_dir.path, params.quality_lvl, params.max_cores);
     
-	int len;
-	struct dirent *pDirent;
-	DIR *cwd;
-
-	cwd = opendir(params.input_dir);
-	if (cwd == NULL) {
-		printf("Cannot open directory '%s'\n", params.input_dir);
-		return 1;
-	}
-
-	while ((pDirent = readdir(cwd)) != NULL) {
-		printf("[%s]\n", pDirent->d_name);
-		if (strstr(pDirent->d_name, ".wav") != NULL) {
-			char *filepath = calloc(strlen(params.input_dir) + strlen(pDirent->d_name) + 2, 1);
-
-			strcat(filepath, params.input_dir);
-			strcat(filepath, "\\");
-			strcat(filepath, pDirent->d_name);
-
-			const int real_strlen = strlen(filepath);
-
-			printf("Filepath %s\n", filepath);
-			
-			FILE *pcm = fopen(filepath, "rb");
-			if (pcm != NULL) {
-				printf("File %s opened!\n", pDirent->d_name);
-				fclose(pcm);
-			}
-			else {
-				printf("File could not be opened\n");
-			}
-
-			free(filepath);
-		}
-	}
-	closedir(cwd);
-
+    struct dirent *pDirent;
+    DIR *cwd;
     const int max_threads = params.max_cores;
 
-	mutex_init(&sem.mutex);
-	cond_init(&sem.cond_var);
+    cwd = opendir(params.input_dir.path);
+    if (cwd == NULL) {
+        printf("Cannot open directory '%s'\n", params.input_dir.path);
+        return 1;
+    }
+    long int name_max = getSystemNameMax();
+    printf("pathname max: %li, filename max: %li\n", PORTABLE_PATH_MAX, name_max);
+
+    while ((pDirent = readdir(cwd)) != NULL) {
+        printf("[%s]\n", pDirent->d_name);
+        if (strstr(pDirent->d_name, ".wav") != NULL) {
+            filepath wav_file = { pDirent->d_name, strlen(pDirent->d_name) };
+            filepath wav_fullpath = get_full_path(params.input_dir, wav_file);
+
+            printf("Filepath %s\n", wav_fullpath.path);
+            
+            FILE *pcm = fopen(wav_fullpath.path, "rb");
+            if (pcm != NULL) {
+                printf("File %s opened!\n", pDirent->d_name);
+                fclose(pcm);
+            }
+            else {
+                printf("File could not be opened\n");
+            }
+
+            free(wav_fullpath.path);
+        }
+    }
+    closedir(cwd);
+
+
+    mutex_init(&sem.mutex);
+    cond_init(&sem.cond_var);
 
     for (int i = 0; i < max_threads; i++) {
-		thread_args *args = malloc(sizeof(thread_args));
+        thread_args *args = malloc(sizeof(thread_args));
         args->thread_id = i;
-		args->in_file = calloc(PATHNAME_MAX_SIZE, 1);
-		args->out_file = calloc(PATHNAME_MAX_SIZE, 1);
+
+        // TODO: Rewrite to use params.input_dir
+        args->in_file = (filepath) {NULL, 0};
+        args->out_file = (filepath) {NULL, 0};
 
         TID_T tid;
-        create_thread(tid, routine, args);
+        create_thread(tid, convert_wav, args);
         printf("created: %i\n", args->thread_id);
     }
 
@@ -280,7 +308,7 @@ int main (int argc, char *argv[]) {
         printf("%i of %i threads are done\n", sem.counter, max_threads);
     }
   
-	printf("All %i threads finished\n", sem.counter);
+    printf("All %i threads finished\n", sem.counter);
     mutex_unlock(&sem.mutex);
 
     mutex_destroy(&sem.mutex);
@@ -290,34 +318,6 @@ int main (int argc, char *argv[]) {
 
 
     /*
-    for(int i = 1; i < argc; i++) {
-        //printf("arg %s %s\n", argv[i], strstr(argv[i], "-o"));
-        if(strcmp(argv[i], "--help") == 0) {
-            usage();
-        } else if(strcmp(argv[i], "--usage") == 0) {
-            usage();
-        } else if(strstr(argv[i], "-v") != NULL) { // Also catches --version
-            version(PROGRAM, VERSION, LICENSE, AUTHOR);
-        } else if(strcmp(argv[i], "-o") < 2) { // Also catches --output
-            printf("wow %s %li\n", argv[i], strspn(argv[i], "-o"));
-            if(argc > ++i) {
-                printf("i %i %i\n", argc, i);
-                output_dir = argv[i];
-            } else {
-                printf("Output required with -o\n");
-                exit(EXIT_FAILURE);
-            }    
-        } else if(strstr(argv[i], "-q") != NULL) { // Also catches --quality
-            if(argc > ++i) {
-                output_dir = argv[i];
-            } else {
-                printf("Quality level required\n");
-                exit(EXIT_FAILURE);
-            }    
-        } else { // This argument must be a directory
-
-        }
-    }
 
     int len;
     struct dirent *pDirent;

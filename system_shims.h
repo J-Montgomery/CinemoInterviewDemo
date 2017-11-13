@@ -7,7 +7,12 @@
  * MSVC Defines
  ****************************************************************************************/
 #if defined(_MSC_VER) /* Then we're building with MSVC */
-	#include <Synchapi.h>
+
+    // Microsoft deprecated many of the stdio functions in favor of incompatible *_s() functions. 
+    // We need to un-deprecate them for portability (until a c11 compiler can be reasonably expected)
+    #define _CRT_SECURE_NO_DEPRECATE
+
+    #include <Synchapi.h>
     #include <direct.h> 
     #define getCwd _getcwd
 
@@ -32,7 +37,7 @@
     #define mutex_init(mutex)    InitializeCriticalSection((mutex))
     #define mutex_destroy(mutex) DeleteCriticalSection((mutex))
 
-	#define cond_init(cv)        InitializeConditionVariable((cv))
+    #define cond_init(cv)        InitializeConditionVariable((cv))
     #define cond_destroy(cv)     
 
     #define mutex_lock(mutex)    EnterCriticalSection((mutex))
@@ -44,7 +49,21 @@
     #define create_thread(tid, f, arg) tid = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)f, arg, 0, NULL)
 
 
-	
+#define INITIAL_SYS_PATH_LEN MAX_PATH
+#define INITIAL_SYS_NAME_LEN 255
+
+    #define PORTABLE_PATH_MAX    MAX_PATH
+
+    long int getSystemNameMax(void) {
+        DWORD lpNameMax;
+        GetVolumeInformation(NULL, NULL, 0, NULL, &lpNameMax, NULL, NULL, 0);
+        return lpNameMax;
+    }
+
+    long int estimateSysNameMax(void) {
+        return NAME_MAX;
+    }
+
 
 /*****************************************************************************************
  * POSIX Defines
