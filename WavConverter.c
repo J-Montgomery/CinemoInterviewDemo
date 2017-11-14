@@ -131,8 +131,18 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
     int opt;
     int sync_out_dir = 1;
 
-    while((opt = getopt_long(argc, argv, "huvo:O:n:", opts, NULL)) != -1) {
-        switch (opt) {
+    while(optind < argc) {
+        opt = getopt_long(argc, argv, "huvo:O:n:", opts, NULL);
+        if(opt == -1) { // Handle non-option arguments (esp. input dir)
+            filepath opt_dir = { argv[optind], strlen(argv[optind]) };
+            params->input_dir = set_path(params->input_dir, opt_dir);
+
+            if(sync_out_dir) // We want to sync input & output dirs if -o isn't explicitly set
+                params->output_dir = set_path(params->output_dir, params->input_dir);
+            optind++;
+        }
+        else {
+            switch(opt) {
             case 'h':
             case 'u':
                 usage();
@@ -143,7 +153,8 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
                 break;
             case 'o':
             {
-                filepath opt_dir = {optarg, strlen(optarg)};
+                printf("-o %s\n", optarg);
+                filepath opt_dir = { optarg, strlen(optarg) };
                 params->output_dir = set_path(params->output_dir, opt_dir);
                 sync_out_dir = 0;
                 break;
@@ -167,8 +178,7 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
                     params->max_cores = max_threads;
                 break;
             }
-            
-            case '?': 
+            case '?':
             {
                 int ind = optind - (int)(optopt == 0); // If given unknown short commands (e.g. -abc), optind will remain 
                                                        // indexed at the current index. Decrement optind otherwise. 
@@ -176,37 +186,66 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
                 break;
             }
-
             default:
                 break;
-          }
+            }
+        }        
     }
-
-    
-    if(optind < argc) { 
-        // TODO: Consider allowing multiple input dirs using a vector
-        filepath opt_dir = { argv[optind], strlen(argv[optind]) };
-        params->input_dir = set_path(params->input_dir, opt_dir);
-
-        if(sync_out_dir) // We want to sync input & output dirs if -o isn't explicitly set
-            params->output_dir = set_path(params->output_dir, params->input_dir);
-    }
-        
-  
 }
 
 /*****************************************************************************************
 * Misc. Functions
 ****************************************************************************************/
 
+void encode(filepath input, filepath output) {
+    int read, write;
 
+    FILE *pcm = fopen(input.path, "rb");
+    FILE *mp3 = fopen(output.path, "wb");
+
+
+    if(pcm == NULL || mp3 == NULL) {
+        printf("Could not open files\n");
+    }
+    else {
+        printf("Opened both files\n");
+    }
+
+    const int PCM_SIZE = 8192;
+    const int MP3_SIZE = 8192;
+
+    short int pcm_buffer[8192 * 2];
+    unsigned char mp3_buffer[8192];
+
+    lame_t lame = lame_init();
+    //lame_set_in_samplerate(lame, 44100);
+    lame_set_VBR(lame, vbr_default);
+    //lame_set_quality(
+    lame_init_params(lame);
+
+    do {
+        read = fread(pcm_buffer, 2 * sizeof(short int), 8192, pcm);
+        if(read == 0)
+            write = lame_encode_flush(lame, mp3_buffer, 8192);
+        else
+            write = lame_encode_buffer_interleaved(lame, pcm_buffer, read, mp3_buffer, 8192);
+        fwrite(mp3_buffer, write, 1, mp3);
+    } while(read != 0);
+
+    lame_close(lame);
+
+    fclose(mp3);
+    fclose(pcm);
+}
 
 void *convert_wav(void *arg)
 {
     thread_args *args = arg;
 
+    printf("searching for file %s | %s\n", args->in_file.path, args->out_file.path);
+
     mutex_lock(&sem.mutex);
-    sem.counter++;
+    sem.counter--;
     cond_signal(&sem.cond_var); 
     mutex_unlock(&sem.mutex);
 
@@ -214,6 +253,34 @@ void *convert_wav(void *arg)
     free(args->out_file.path);
     free(args); // Avoid a temporary memory leak
     return 0;
+}
+
+void wav_file_found(filepath dir, filepath file, void *args) {
+    parameters params = *(parameters *)args;
+
+    struct thread_args *t_params = malloc(sizeof(thread_args));
+    t_params->thread_id = rand();
+
+    t_params->in_file = get_full_path(dir, file);
+    t_params->out_file = get_full_path(params.output_dir, file);
+
+    TID_T tid;
+
+    mutex_lock(&sem.mutex);
+
+    if(sem.counter >= params.max_cores) {
+        printf("Waiting\n");
+        cond_wait(&sem.cond_var, &sem.mutex);
+        printf("Starting thread\n");
+    }
+        
+
+    create_thread(tid, convert_wav, t_params);
+
+    sem.counter++;
+    mutex_unlock(&sem.mutex);
+
+    printf("created: %i\n", t_params->thread_id);
 }
 
 /*****************************************************************************************
@@ -228,8 +295,8 @@ int main (int argc, char *argv[]) {
                           .quality_lvl = OPTIMIZE_QUALITY,
                           .max_cores   = getNumCPUs() };
 
-    params.input_dir.path = getCwd(NULL, INITIAL_SYS_PATH_LEN);
-    params.input_dir.path_len = strlen(params.input_dir.path);
+    params.input_dir.path = getCwd(NULL, INITIAL_SYS_PATH_LEN); // getcwd() will malloc enough memory
+    params.input_dir.path_len = max(strlen(params.input_dir.path), INITIAL_SYS_PATH_LEN);
 
     params.output_dir.path_len = max(params.input_dir.path_len, INITIAL_SYS_PATH_LEN);
     params.output_dir.path = malloc(params.output_dir.path_len);
@@ -243,48 +310,37 @@ int main (int argc, char *argv[]) {
     }
 
     parseOpts(&params, argc, argv);
+    params.input_dir = normalize_filepath(params.input_dir);
+    params.output_dir = normalize_filepath(params.output_dir);
 
     printf("\
     parameters params = {.input_dir   = %s,\n\
                          .output_dir  = %s,\n\
                          .quality_lvl = %i,\n\
                          .max_cores   = %i };\n", params.input_dir.path, params.output_dir.path, params.quality_lvl, params.max_cores);
-    
-    struct dirent *pDirent;
-    DIR *cwd;
-    const int max_threads = params.max_cores;
 
-    cwd = opendir(params.input_dir.path);
-    if (cwd == NULL) {
-        printf("Cannot open directory '%s'\n", params.input_dir.path);
-        return 1;
+
+    mutex_init(&sem.mutex);
+    cond_init(&sem.cond_var);
+
+    callback cb = { .func = &wav_file_found, 
+                    .args = &params };
+
+    traverse_dir(params.input_dir, "wav", cb);
+
+    mutex_lock(&sem.mutex);
+
+    while(sem.counter > 0) {
+        cond_wait(&sem.cond_var, &sem.mutex);
+        printf("%i of %i threads left\n", sem.counter, params.max_cores);
     }
-    long int name_max = getSystemNameMax();
-    printf("pathname max: %li, filename max: %li\n", PORTABLE_PATH_MAX, name_max);
 
-    while ((pDirent = readdir(cwd)) != NULL) {
-        printf("[%s]\n", pDirent->d_name);
-        if (strstr(pDirent->d_name, ".wav") != NULL) {
-            filepath wav_file = { pDirent->d_name, strlen(pDirent->d_name) };
-            filepath wav_fullpath = get_full_path(params.input_dir, wav_file);
+    mutex_unlock(&sem.mutex);
 
-            printf("Filepath %s\n", wav_fullpath.path);
-            
-            FILE *pcm = fopen(wav_fullpath.path, "rb");
-            if (pcm != NULL) {
-                printf("File %s opened!\n", pDirent->d_name);
-                fclose(pcm);
-            }
-            else {
-                printf("File could not be opened\n");
-            }
+    mutex_destroy(&sem.mutex);
+    cond_destroy(&sem.cond_var);
 
-            free(wav_fullpath.path);
-        }
-    }
-    closedir(cwd);
-
-
+    /*const int max_threads = params.max_cores;
     mutex_init(&sem.mutex);
     cond_init(&sem.cond_var);
 
@@ -312,7 +368,7 @@ int main (int argc, char *argv[]) {
     mutex_unlock(&sem.mutex);
 
     mutex_destroy(&sem.mutex);
-    cond_destroy(&sem.cond_var);
+    cond_destroy(&sem.cond_var);*/
 
     exit(EXIT_SUCCESS);
 
@@ -324,7 +380,15 @@ int main (int argc, char *argv[]) {
     DIR *cwd;*/
 
     
-
+    /*
+    FILE *pcm = fopen(wav_fullpath.path, "rb");
+    if(pcm != NULL) {
+    printf("File %s opened!\n", pDirent->d_name);
+    fclose(pcm);
+    }
+    else {
+    printf("File could not be opened\n");
+    }*/
 
     /*
     cwd = opendir (argv[1]);
@@ -378,8 +442,9 @@ int main (int argc, char *argv[]) {
         unsigned char mp3_buffer[MP3_SIZE];
     
         lame_t lame = lame_init();
-        lame_set_in_samplerate(lame, 44100);
+        //lame_set_in_samplerate(lame, 44100);
         lame_set_VBR(lame, vbr_default);
+        lame_set_quality(
         lame_init_params(lame);
     
         do {
