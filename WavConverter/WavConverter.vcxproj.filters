@@ -11,29 +11,35 @@
     </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav</Extensions>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="getopt">
+      <UniqueIdentifier>{a5596c10-e141-4487-8329-386958ca2966}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="filesystem_access.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="system_shims.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="WavConverter.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="getopt\getopt.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="filesystem_access.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\lib\getopt\getopt.c">
+      <Filter>getopt</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="filesystem_access.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="system_shims.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="getopt\getopt.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\lib\getopt\getopt.h">
+      <Filter>getopt</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

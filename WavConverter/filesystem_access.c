@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -6,10 +7,6 @@
 #include "filesystem_access.h"
 #include "system_shims.h"
 
-
-static filepath get_system_full_path(filepath path) {
-
-}
 
 filepath set_path(filepath dest, filepath src) {
     if(dest.path_len <= src.path_len) {
@@ -21,15 +18,6 @@ filepath set_path(filepath dest, filepath src) {
     dest.path[src.path_len] = 0;
 
     return dest;
-}
-
-filepath dup_filepath(filepath old_path) {
-    filepath new_path;
-    new_path.path = calloc(old_path.path_len + 1, 1);
-    memcpy(new_path.path, old_path.path, old_path.path_len + 1);
-    new_path.path_len = old_path.path_len;
-
-    return new_path;
 }
 
 filepath get_full_path(filepath dir, filepath file) {
@@ -46,6 +34,9 @@ filepath get_full_path(filepath dir, filepath file) {
 }
 
 filepath normalize_filepath(filepath path) {
+    if(path.path == NULL || path.path_len == 0)
+        return (filepath) { NULL, 0 };
+
     size_t new_len = strlen(path.path);
 
     if(path.path[new_len - 1] != '\\') {

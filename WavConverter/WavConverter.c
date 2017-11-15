@@ -13,6 +13,8 @@ Requirements:
     (9) the LAME encoder should be used with reasonable standard settings (e.g. quality based encoding with quality level "good") 
 */
 
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -20,7 +22,7 @@ Requirements:
 #include <dirent.h>
 #include <lame.h>
 
-#include "getopt/getopt.h"
+#include <getopt.h>
 #include "system_shims.h"
 #include "filesystem_access.h"
 
@@ -150,6 +152,7 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
                 break;
             case 'v':
                 version(PROGRAM, VERSION, LICENSE, AUTHOR);
+                exit(EXIT_SUCCESS);
                 break;
             case 'o':
             {
@@ -243,6 +246,7 @@ void *convert_wav(void *arg)
     thread_args *args = arg;
 
     printf("searching for file %s | %s\n", args->in_file.path, args->out_file.path);
+    encode(args->in_file, args->out_file);
 
     mutex_lock(&sem.mutex);
     sem.counter--;
@@ -262,6 +266,7 @@ void wav_file_found(filepath dir, filepath file, void *args) {
     t_params->thread_id = rand();
 
     t_params->in_file = get_full_path(dir, file);
+    memcpy(&file.path[file.path_len-3], "mp3", 3);
     t_params->out_file = get_full_path(params.output_dir, file);
 
     TID_T tid;
@@ -298,18 +303,19 @@ int main (int argc, char *argv[]) {
     params.input_dir.path = getCwd(NULL, INITIAL_SYS_PATH_LEN); // getcwd() will malloc enough memory
     params.input_dir.path_len = max(strlen(params.input_dir.path), INITIAL_SYS_PATH_LEN);
 
-    params.output_dir.path_len = max(params.input_dir.path_len, INITIAL_SYS_PATH_LEN);
-    params.output_dir.path = malloc(params.output_dir.path_len);
-
-    // Initialize output dir in case input dir is not specified on CLI
-    memcpy(params.output_dir.path, params.input_dir.path, params.input_dir.path_len);
+    // Copy the dir over in case we receive no arguments on the command line
+    params.output_dir.path = calloc(params.input_dir.path_len, 1);
+    memcpy(params.output_dir.path, params.input_dir.path, params.input_dir.path_len + 1);
+    params.output_dir.path_len = params.input_dir.path_len;
 
     if(argc == 1) {
         usage();
         exit(EXIT_SUCCESS);
     }
 
+
     parseOpts(&params, argc, argv);
+
     params.input_dir = normalize_filepath(params.input_dir);
     params.output_dir = normalize_filepath(params.output_dir);
 
@@ -319,21 +325,30 @@ int main (int argc, char *argv[]) {
                          .quality_lvl = %i,\n\
                          .max_cores   = %i };\n", params.input_dir.path, params.output_dir.path, params.quality_lvl, params.max_cores);
 
+    int i_exist = f_access(params.input_dir.path, test_existence);
+    int o_exist = f_access(params.output_dir.path, test_existence);
+
+    if(i_exist == -1) {
+        printf("Input dir %s does not exist\n", params.input_dir.path);
+        exit(EXIT_FAILURE);
+    } else if(o_exist == -1) { // Should we try to create the dir?
+        printf("Output dir %s does not exist\n", params.output_dir.path);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("f_exist %i | %i\n", i_exist, o_exist);
 
     mutex_init(&sem.mutex);
     cond_init(&sem.cond_var);
 
-    callback cb = { .func = &wav_file_found, 
+    callback cb = { .func = &wav_file_found,
                     .args = &params };
-
     traverse_dir(params.input_dir, "wav", cb);
 
     mutex_lock(&sem.mutex);
 
-    while(sem.counter > 0) {
+    while(sem.counter > 0) // Idle while the threads do their work
         cond_wait(&sem.cond_var, &sem.mutex);
-        printf("%i of %i threads left\n", sem.counter, params.max_cores);
-    }
 
     mutex_unlock(&sem.mutex);
 

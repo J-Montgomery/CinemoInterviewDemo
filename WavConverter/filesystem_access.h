@@ -19,7 +19,6 @@ typedef struct callback {
 
 filepath set_path(filepath dest, filepath src);
 filepath get_full_path(filepath dir, filepath file);
-filepath dup_filepath(filepath old_path);
 filepath normalize_filepath(filepath path);
 bool match_extension(char *file, char *extension);
 bool traverse_dir(filepath cwd, char *extension, callback cb);

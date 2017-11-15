@@ -10,8 +10,16 @@
 
     #include <windows.h>
     #include <direct.h> 
+    #include <io.h>
     #define getCwd _getcwd
 
+    enum access_modes {
+        test_existence = 0,
+        test_write = 2,
+        test_read = 4
+    };
+
+    #define f_access(file, mode) _access((file), (mode))
 /*
  * MSVC Threading API: http://66.165.136.43/dictionary/pthread_cond_wait-entry.php
  */
@@ -52,6 +60,13 @@
     #include <unistd.h>
     #include <limits.h> /* Let's hope this includes PATH_MAX and NAME_MAX, but it probably doesn't on most systems */
 
+    enum access_modes {
+        test_exist = F_OK, // 0
+        test_write = W_OK, // 2
+        test_read = R_OK   // 4
+    };
+
+    #define f_access(file, mode) access((x), (mode))
     
 /*
  * POSIX Threading API
