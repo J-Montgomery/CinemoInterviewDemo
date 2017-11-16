@@ -31,19 +31,21 @@ Requirements:
 #define LICENSE "Some license copyright (C) 2017"
 #define AUTHOR "Jordan Montgomery"
 
-
+/*****************************************************************************************
+* Configuration defines
+****************************************************************************************/
 #define DEFAULT_Q_LVL (5)
 #define PCM_SIZE      (8192)
 #define MP3_SIZE      (8192)
 
-
 /*****************************************************************************************
- * Defined parameters and globals needed for init
+ * Structs and types
  ****************************************************************************************/
-/* There is no way to safely use getcwd() without a max path size */
-#define PATHNAME_MAX_SIZE 256 
-
-char *executable_name;
+enum quality_lvl {
+    OPTIMIZE_QUALITY_HIGH = 2,
+    OPTIMIZE_QUALITY_MID = 5,
+    OPTIMIZE_QUALITY_LOW = 7
+};
 
 struct option opts[] = {
     {"help",        no_argument, 0, 'h'},
@@ -55,13 +57,6 @@ struct option opts[] = {
     {0, 0, 0, 0}
   };
 
-enum quality_lvl {
-    OPTIMIZE_QUALITY_HIGH = 2,
-    OPTIMIZE_QUALITY_MID  = 5,
-    OPTIMIZE_QUALITY_LOW  = 7
-};
-
-
 typedef struct parameters {
     filepath input_dir;
     filepath output_dir;
@@ -70,7 +65,6 @@ typedef struct parameters {
     int   max_cores;
 } parameters;
 
-
 typedef struct thread_args {
     filepath in_file;
     filepath out_file;
@@ -78,17 +72,18 @@ typedef struct thread_args {
     int quality;
 } thread_args;
 
-
-
-/*! This struct is an alternative to a semaphore, which would be less clear here */
+/*! A straight semaphore would be less clear than this struct */
 struct sync_block {
-    MUTEX_T mutex;
-    COND_T cond_var;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond_var;
     int counter;
 };
 
+/*****************************************************************************************
+* Globals
+****************************************************************************************/
 struct sync_block sem = { .counter = 0 };
-
+char *executable_name;
 
 /*****************************************************************************************
 * Function prototypes
@@ -100,9 +95,9 @@ void parseOpts(parameters *params, int argc, char *argv[]);
 
 
 /* Misc. function prototypes */
-
+void encode(filepath input, filepath output, int quality);
 void *convert_wav(void *arg);
-
+void wav_file_found(filepath dir, filepath file, void *args);
 
 /*****************************************************************************************
  * Parameter parsing Functions
@@ -203,7 +198,7 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
 }
 
 /*****************************************************************************************
-* Misc. Functions
+* Encoding Functions
 ****************************************************************************************/
 
 void encode(filepath input, filepath output, int quality) {
@@ -212,13 +207,12 @@ void encode(filepath input, filepath output, int quality) {
     FILE *pcm = fopen(input.path, "rb");
     FILE *mp3 = fopen(output.path, "wb+");
 
-
     if(pcm == NULL || mp3 == NULL) {
         printf("Could not open files\n");
         return;
     }
 
-    // These would be better malloc'd on an MCU
+    // These would be better malloc'd on an MCU with a small stack
     short int pcm_buffer[PCM_SIZE * 2];
     unsigned char mp3_buffer[MP3_SIZE];
 
@@ -257,10 +251,10 @@ void *convert_wav(void *arg)
     printf("encoding %s\n", args->out_file.path);
     encode(args->in_file, args->out_file, args->quality);
 
-    mutex_lock(&sem.mutex);
+    pthread_mutex_lock(&sem.mutex);
     sem.counter--;
-    cond_signal(&sem.cond_var); 
-    mutex_unlock(&sem.mutex);
+    pthread_cond_signal(&sem.cond_var);
+    pthread_mutex_unlock(&sem.mutex);
 
     free(args->in_file.path);
     free(args->out_file.path);
@@ -274,19 +268,21 @@ void wav_file_found(filepath dir, filepath file, void *args) {
     struct thread_args *t_params = malloc(sizeof(thread_args));
 
     t_params->in_file = get_full_path(dir, file);
+
     memcpy(&file.path[file.path_len-3], "mp3", 3);
     t_params->out_file = get_full_path(params.output_dir, file);
+
     t_params->quality = params.quality_lvl;
 
-    TID_T tid;
-    mutex_lock(&sem.mutex);
+    pthread_t tid;
+    pthread_mutex_lock(&sem.mutex);
     if(sem.counter >= params.max_cores)
-        cond_wait(&sem.cond_var, &sem.mutex);
+        pthread_cond_wait(&sem.cond_var, &sem.mutex);
 
-    create_thread(tid, convert_wav, t_params);
+    pthread_create(&tid, convert_wav, t_params);
     sem.counter++;
 
-    mutex_unlock(&sem.mutex);
+    pthread_mutex_unlock(&sem.mutex);
 }
 
 /*****************************************************************************************
@@ -316,7 +312,6 @@ int main (int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
         
-
     parseOpts(&params, argc, argv);
 
     params.input_dir = normalize_filepath(params.input_dir);
@@ -339,23 +334,23 @@ int main (int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    mutex_init(&sem.mutex);
-    cond_init(&sem.cond_var);
+    pthread_mutex_init(&sem.mutex);
+    pthread_cond_init(&sem.cond_var);
 
     callback cb = { .func = &wav_file_found,
                     .args = &params };
     traverse_dir(params.input_dir, "wav", cb);
 
-    mutex_lock(&sem.mutex);
+    pthread_mutex_lock(&sem.mutex);
     while(sem.counter > 0) // Idle while the threads do their work
-        cond_wait(&sem.cond_var, &sem.mutex);
+        pthread_cond_wait(&sem.cond_var, &sem.mutex);
 
-    mutex_unlock(&sem.mutex);
+    pthread_mutex_unlock(&sem.mutex);
 
-    mutex_destroy(&sem.mutex);
-    cond_destroy(&sem.cond_var);
+    pthread_mutex_destroy(&sem.mutex);
+    pthread_cond_destroy(&sem.cond_var);
 
     // The OS will deallocate params.input_dir.path and params.output_dir.path automatically
-    // But on embedded systems they should be deallocated for sanitation reasons
+    // On bare-metal embedded systems they should be deallocated for sanitation reasons
     return 0;
 }
