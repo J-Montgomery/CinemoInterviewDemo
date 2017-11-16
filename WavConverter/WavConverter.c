@@ -110,7 +110,7 @@ Convert WAV files to MP3 via LAME\n\
 Examples:\n\
 \t%s F:\\MyWavCollection\n\
 \t%s . -o output\n\
-\t%s -quality mid ~/\n\
+\t%s --quality mid ~/\n\
 Options:\n\
 \t-o, --output    [DIR]\n\
 \t-n, --max-cores [N]\n\
