@@ -21,7 +21,7 @@
 
     #define f_access(file, mode) _access((file), (mode))
 /*
- * MSVC Threading API: http://66.165.136.43/dictionary/pthread_cond_wait-entry.php
+ * pthreads shim API
  */
     #define MUTEX_T CRITICAL_SECTION
     #define COND_T CONDITION_VARIABLE
@@ -47,8 +47,13 @@
     #define INITIAL_SYS_PATH_LEN MAX_PATH
     #define INITIAL_SYS_NAME_LEN 255
 
-    int getNumCPUs(void);
-    long int getSystemNameMax(char *filename);
+    int getNumCPUs(void) {
+        SYSTEM_INFO sysinfo;
+        GetSystemInfo(&sysinfo); // This call can only count up to 32 cores. 
+                                 // GetNativeSystemInfo would count up to 64 if available, 
+                                 // but adds call complexity
+        return sysinfo.dwNumberOfProcessors;
+    }
 
 
 /*****************************************************************************************
@@ -58,6 +63,8 @@
     #include <pthread.h>
     #include <unistd.h>
     #include <limits.h> /* Let's hope this includes PATH_MAX and NAME_MAX, but it probably doesn't on most systems */
+
+    #define getCwd getcwd
 
     enum access_modes {
         test_exist = F_OK, // 0
@@ -92,7 +99,7 @@
     #define create_thread(tid, f, arg) pthread_create(&(tid), NULL, f, arg)
 
  /*
- * Workarounds for POSIX filesystem insanity
+ * Workarounds for practical non-compliance to POSIX 
  */
     #if defined(PATH_MAX)
         #define INITIAL_SYS_PATH_LEN PATH_MAX
@@ -108,7 +115,9 @@
 
 
     
-    int getNumCPUs(void);
+    int getNumCPUs(void) {
+        return sysconf(_SC_NPROCESSORS_ONLN);
+    }
 
 #endif
 

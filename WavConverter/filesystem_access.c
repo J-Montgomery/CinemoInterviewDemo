@@ -5,7 +5,6 @@
 
 #include <dirent.h>
 #include "filesystem_access.h"
-#include "system_shims.h"
 
 
 filepath set_path(filepath dest, filepath src) {
@@ -21,9 +20,9 @@ filepath set_path(filepath dest, filepath src) {
 
 filepath get_full_path(filepath dir, filepath file) {
     size_t len = dir.path_len + file.path_len;
-
     filepath full_path = { .path     = calloc(len + 1, 1),
                            .path_len = len };
+
     snprintf(full_path.path, full_path.path_len + 1, "%s%s", dir.path, file.path);
     return full_path;
 }
@@ -39,6 +38,7 @@ filepath normalize_filepath(filepath path) {
     if(path.path[new_len - 1] != '\\') {
         if(path.path_len < (new_len + 1))
             realloc(path.path, new_len + 2);
+
         path.path[new_len] = '\\';
         path.path[new_len + 1] = '\0';
         new_len += 1;
@@ -50,7 +50,6 @@ filepath normalize_filepath(filepath path) {
 }
 
 bool match_extension(char *filename, char *extension) {
-    // TODO: Rewrite using system-specific code
     return (strstr(filename, extension) != NULL);
 }
 

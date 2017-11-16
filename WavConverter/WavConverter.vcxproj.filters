@@ -21,9 +21,6 @@
     <ClCompile Include="filesystem_access.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="system_shims.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="WavConverter.c">
       <Filter>Source Files</Filter>
     </ClCompile>

@@ -15,8 +15,6 @@ typedef struct callback {
     void *args;
 } callback;
 
-
-
 filepath set_path(filepath dest, filepath src);
 filepath get_full_path(filepath dir, filepath file);
 filepath normalize_filepath(filepath path);

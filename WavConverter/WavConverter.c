@@ -31,6 +31,9 @@ Requirements:
 #define LICENSE "Some license copyright (C) 2017"
 #define AUTHOR "Jordan Montgomery"
 
+#define PCM_SIZE (8192)
+#define MP3_SIZE (8192)
+
 
 /*****************************************************************************************
  * Defined parameters and globals needed for init
@@ -214,12 +217,9 @@ void encode(filepath input, filepath output) {
         printf("Opened both files\n");
     }
 
-    const int PCM_SIZE = 8192;
-    const int MP3_SIZE = 8192;
-
     // These would be better malloc'd on an MCU
-    short int pcm_buffer[8192 * 2];
-    unsigned char mp3_buffer[8192];
+    short int pcm_buffer[PCM_SIZE * 2];
+    unsigned char mp3_buffer[MP3_SIZE];
 
     lame_t lame = lame_init(); // No need to check for a null ptr yet, the config functions check internally
     lame_set_VBR(lame, vbr_default);
@@ -228,15 +228,17 @@ void encode(filepath input, filepath output) {
 
     if(lame_success < 0) {
         printf("Encoder failed to init %s\n", input.path);
+        fclose(pcm);
+        fclose(mp3);
         return;
     }
 
     do {
-        read = fread(pcm_buffer, 2 * sizeof(short int), 8192, pcm);
+        read = fread(pcm_buffer, 2 * sizeof(short int), PCM_SIZE, pcm);
         if(read != 0)
-            write = lame_encode_buffer_interleaved(lame, pcm_buffer, read, mp3_buffer, 8192);
+            write = lame_encode_buffer_interleaved(lame, pcm_buffer, read, mp3_buffer, MP3_SIZE);
         else
-            write = lame_encode_flush(lame, mp3_buffer, 8192);
+            write = lame_encode_flush(lame, mp3_buffer, MP3_SIZE);
         fwrite(mp3_buffer, write, 1, mp3);
     } while(read != 0);
 
@@ -316,6 +318,11 @@ int main (int argc, char *argv[]) {
         usage();
         exit(EXIT_SUCCESS);
     }
+    else if(params.input_dir.path == NULL || params.output_dir.path == NULL) {
+        puts("Could not allocate memory\n");
+        exit(EXIT_FAILURE);
+    }
+        
 
     parseOpts(&params, argc, argv);
 
@@ -349,7 +356,6 @@ int main (int argc, char *argv[]) {
     traverse_dir(params.input_dir, "wav", cb);
 
     mutex_lock(&sem.mutex);
-
     while(sem.counter > 0) // Idle while the threads do their work
         cond_wait(&sem.cond_var, &sem.mutex);
 
@@ -358,5 +364,7 @@ int main (int argc, char *argv[]) {
     mutex_destroy(&sem.mutex);
     cond_destroy(&sem.cond_var);
 
+    // The OS will deallocate params.input_dir.path and params.output_dir.path automatically
+    // But on embedded systems they should be deallocated for sanitation reasons
     return 0;
 }
