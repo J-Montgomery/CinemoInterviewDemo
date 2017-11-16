@@ -70,5 +70,5 @@ bool traverse_dir(filepath cwd, char *extension, callback cb) {
     }
     closedir(dir);
 
-    return FALSE;
+    return TRUE;
 }

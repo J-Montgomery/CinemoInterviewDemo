@@ -31,8 +31,10 @@ Requirements:
 #define LICENSE "Some license copyright (C) 2017"
 #define AUTHOR "Jordan Montgomery"
 
-#define PCM_SIZE (8192)
-#define MP3_SIZE (8192)
+
+#define DEFAULT_Q_LVL (5)
+#define PCM_SIZE      (8192)
+#define MP3_SIZE      (8192)
 
 
 /*****************************************************************************************
@@ -48,15 +50,15 @@ struct option opts[] = {
     {"usage",       no_argument, 0, 'u'},
     {"version",     no_argument, 0, 'v'},
     {"output",      required_argument, 0, 'o'},
-    {"optimize",    required_argument, 0, 'O'},
+    {"quality",     required_argument, 0, 'q'},
     {"max-cores",   required_argument, 0, 'n'},
     {0, 0, 0, 0}
   };
 
 enum quality_lvl {
-    OPTIMIZE_QUALITY = 0,
-    OPTIMIZE_SIZE    = 1,
-    OPTIMIZE_SPEED   = 2
+    OPTIMIZE_QUALITY_HIGH = 2,
+    OPTIMIZE_QUALITY_MID  = 5,
+    OPTIMIZE_QUALITY_LOW  = 7
 };
 
 
@@ -70,9 +72,10 @@ typedef struct parameters {
 
 
 typedef struct thread_args {
-    int thread_id;
     filepath in_file;
     filepath out_file;
+
+    int quality;
 } thread_args;
 
 
@@ -113,11 +116,11 @@ Convert WAV files to MP3 via LAME\n\
 Examples:\n\
 \t%s F:\\MyWavCollection\n\
 \t%s . -o output\n\
-\t%s --optimize=quality ~/\n\
+\t%s -quality mid ~/\n\
 Options:\n\
 \t-o, --output    [DIR]\n\
 \t-n, --max-cores [N]\n\
-\t-O, --optimize  [quality|size|speed]\n\
+\t    --quality   [high|mid|low]\n\
 \t-v, --version\n\
 \t-h, --help\n\
 \t    --usage\
@@ -165,15 +168,15 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
                 sync_out_dir = 0;
                 break;
             }
-            case 'O':
-                if(strcmp(optarg, "quality") == 0)
-                    params->quality_lvl = OPTIMIZE_QUALITY;
-                else if(strcmp(optarg, "size") == 0)
-                    params->quality_lvl = OPTIMIZE_SIZE;
-                else if(strcmp(optarg, "speed") == 0)
-                    params->quality_lvl = OPTIMIZE_SPEED;
+            case 'q':
+                if(strcmp(optarg, "high") == 0)
+                    params->quality_lvl = OPTIMIZE_QUALITY_HIGH;
+                else if(strcmp(optarg, "mid") == 0)
+                    params->quality_lvl = OPTIMIZE_QUALITY_MID;
+                else if(strcmp(optarg, "low") == 0)
+                    params->quality_lvl = OPTIMIZE_QUALITY_LOW;
                 else {
-                    puts("Unknown quality");
+                    puts("Unknown quality level");
                     exit(EXIT_FAILURE);
                 }
                 break;
@@ -203,7 +206,7 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
 * Misc. Functions
 ****************************************************************************************/
 
-void encode(filepath input, filepath output) {
+void encode(filepath input, filepath output, int quality) {
     int read, write;
 
     FILE *pcm = fopen(input.path, "rb");
@@ -212,9 +215,7 @@ void encode(filepath input, filepath output) {
 
     if(pcm == NULL || mp3 == NULL) {
         printf("Could not open files\n");
-    }
-    else {
-        printf("Opened both files\n");
+        return;
     }
 
     // These would be better malloc'd on an MCU
@@ -223,7 +224,7 @@ void encode(filepath input, filepath output) {
 
     lame_t lame = lame_init(); // No need to check for a null ptr yet, the config functions check internally
     lame_set_VBR(lame, vbr_default);
-    lame_set_quality(lame, 2);
+    lame_set_quality(lame, quality);
     int lame_success = lame_init_params(lame);
 
     if(lame_success < 0) {
@@ -253,8 +254,8 @@ void *convert_wav(void *arg)
 {
     thread_args *args = arg;
 
-    printf("searching for file %s | %s\n", args->in_file.path, args->out_file.path);
-    encode(args->in_file, args->out_file);
+    printf("encoding %s\n", args->out_file.path);
+    encode(args->in_file, args->out_file, args->quality);
 
     mutex_lock(&sem.mutex);
     sem.counter--;
@@ -263,7 +264,7 @@ void *convert_wav(void *arg)
 
     free(args->in_file.path);
     free(args->out_file.path);
-    free(args); // Avoid a temporary memory leak
+    free(args); // Avoid memory leaks
     return 0;
 }
 
@@ -271,29 +272,21 @@ void wav_file_found(filepath dir, filepath file, void *args) {
     parameters params = *(parameters *)args;
 
     struct thread_args *t_params = malloc(sizeof(thread_args));
-    t_params->thread_id = rand();
 
     t_params->in_file = get_full_path(dir, file);
     memcpy(&file.path[file.path_len-3], "mp3", 3);
     t_params->out_file = get_full_path(params.output_dir, file);
+    t_params->quality = params.quality_lvl;
 
     TID_T tid;
-
     mutex_lock(&sem.mutex);
-
-    if(sem.counter >= params.max_cores) {
-        printf("Waiting\n");
+    if(sem.counter >= params.max_cores)
         cond_wait(&sem.cond_var, &sem.mutex);
-        printf("Starting thread\n");
-    }
-        
 
     create_thread(tid, convert_wav, t_params);
-
     sem.counter++;
-    mutex_unlock(&sem.mutex);
 
-    printf("created: %i\n", t_params->thread_id);
+    mutex_unlock(&sem.mutex);
 }
 
 /*****************************************************************************************
@@ -305,7 +298,7 @@ int main (int argc, char *argv[]) {
 
     parameters params = { .input_dir   = (filepath) {NULL, 0},
                           .output_dir  = (filepath) {NULL, 0},
-                          .quality_lvl = OPTIMIZE_QUALITY,
+                          .quality_lvl = OPTIMIZE_QUALITY_MID,
                           .max_cores   = getNumCPUs() };
 
     params.input_dir.path = getCwd(NULL, INITIAL_SYS_PATH_LEN); // getcwd() will malloc enough memory
@@ -319,7 +312,7 @@ int main (int argc, char *argv[]) {
         exit(EXIT_SUCCESS);
     }
     else if(params.input_dir.path == NULL || params.output_dir.path == NULL) {
-        puts("Could not allocate memory\n");
+        puts("Could not allocate memory");
         exit(EXIT_FAILURE);
     }
         
@@ -345,8 +338,6 @@ int main (int argc, char *argv[]) {
         printf("Output dir %s does not exist\n", params.output_dir.path);
         exit(EXIT_FAILURE);
     }
-
-    printf("f_exist %i | %i\n", i_exist, o_exist);
 
     mutex_init(&sem.mutex);
     cond_init(&sem.cond_var);
