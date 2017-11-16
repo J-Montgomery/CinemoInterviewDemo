@@ -114,7 +114,7 @@ Examples:\n\
 Options:\n\
 \t-o, --output    [DIR]\n\
 \t-n, --max-cores [N]\n\
-\t    --quality   [high|mid|low]\n\
+\t-q, --quality   [high|mid|low]\n\
 \t-v, --version\n\
 \t-h, --help\n\
 \t    --usage\
@@ -134,7 +134,7 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
     int sync_out_dir = 1;
 
     while(optind < argc) {
-        opt = getopt_long(argc, argv, "huvo:O:n:", opts, NULL);
+        opt = getopt_long(argc, argv, "huvo:q:n:", opts, NULL);
         if(opt == -1) { // Handle non-option arguments (esp. input dir)
             filepath opt_dir = { argv[optind], strlen(argv[optind]) };
             params->input_dir = set_path(params->input_dir, opt_dir);
