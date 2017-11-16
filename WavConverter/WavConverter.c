@@ -93,7 +93,6 @@ void usage(void);
 void version(char *name, char *version, char *license, char *author);
 void parseOpts(parameters *params, int argc, char *argv[]);
 
-
 /* Misc. function prototypes */
 void encode(filepath input, filepath output, int quality);
 void *convert_wav(void *arg);
