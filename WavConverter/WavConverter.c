@@ -204,7 +204,7 @@ void encode(filepath input, filepath output) {
     int read, write;
 
     FILE *pcm = fopen(input.path, "rb");
-    FILE *mp3 = fopen(output.path, "wb");
+    FILE *mp3 = fopen(output.path, "wb+");
 
 
     if(pcm == NULL || mp3 == NULL) {
@@ -217,24 +217,30 @@ void encode(filepath input, filepath output) {
     const int PCM_SIZE = 8192;
     const int MP3_SIZE = 8192;
 
+    // These would be better malloc'd on an MCU
     short int pcm_buffer[8192 * 2];
     unsigned char mp3_buffer[8192];
 
-    lame_t lame = lame_init();
-    //lame_set_in_samplerate(lame, 44100);
+    lame_t lame = lame_init(); // No need to check for a null ptr yet, the config functions check internally
     lame_set_VBR(lame, vbr_default);
-    //lame_set_quality(
-    lame_init_params(lame);
+    lame_set_quality(lame, 2);
+    int lame_success = lame_init_params(lame);
+
+    if(lame_success < 0) {
+        printf("Encoder failed to init %s\n", input.path);
+        return;
+    }
 
     do {
         read = fread(pcm_buffer, 2 * sizeof(short int), 8192, pcm);
-        if(read == 0)
-            write = lame_encode_flush(lame, mp3_buffer, 8192);
-        else
+        if(read != 0)
             write = lame_encode_buffer_interleaved(lame, pcm_buffer, read, mp3_buffer, 8192);
+        else
+            write = lame_encode_flush(lame, mp3_buffer, 8192);
         fwrite(mp3_buffer, write, 1, mp3);
     } while(read != 0);
 
+    lame_mp3_tags_fid(lame, mp3);
     lame_close(lame);
 
     fclose(mp3);
@@ -304,15 +310,12 @@ int main (int argc, char *argv[]) {
     params.input_dir.path_len = max(strlen(params.input_dir.path), INITIAL_SYS_PATH_LEN);
 
     // Copy the dir over in case we receive no arguments on the command line
-    params.output_dir.path = calloc(params.input_dir.path_len, 1);
-    memcpy(params.output_dir.path, params.input_dir.path, params.input_dir.path_len + 1);
-    params.output_dir.path_len = params.input_dir.path_len;
+    params.output_dir = set_path(params.output_dir, params.input_dir);
 
     if(argc == 1) {
         usage();
         exit(EXIT_SUCCESS);
     }
-
 
     parseOpts(&params, argc, argv);
 
@@ -355,126 +358,5 @@ int main (int argc, char *argv[]) {
     mutex_destroy(&sem.mutex);
     cond_destroy(&sem.cond_var);
 
-    /*const int max_threads = params.max_cores;
-    mutex_init(&sem.mutex);
-    cond_init(&sem.cond_var);
-
-    for (int i = 0; i < max_threads; i++) {
-        thread_args *args = malloc(sizeof(thread_args));
-        args->thread_id = i;
-
-        // TODO: Rewrite to use params.input_dir
-        args->in_file = (filepath) {NULL, 0};
-        args->out_file = (filepath) {NULL, 0};
-
-        TID_T tid;
-        create_thread(tid, convert_wav, args);
-        printf("created: %i\n", args->thread_id);
-    }
-
-    mutex_unlock(&sem.mutex);
-
-    while(sem.counter < max_threads) {
-        cond_wait(&sem.cond_var, &sem.mutex); 
-        printf("%i of %i threads are done\n", sem.counter, max_threads);
-    }
-  
-    printf("All %i threads finished\n", sem.counter);
-    mutex_unlock(&sem.mutex);
-
-    mutex_destroy(&sem.mutex);
-    cond_destroy(&sem.cond_var);*/
-
-    exit(EXIT_SUCCESS);
-
-
-    /*
-
-    int len;
-    struct dirent *pDirent;
-    DIR *cwd;*/
-
-    
-    /*
-    FILE *pcm = fopen(wav_fullpath.path, "rb");
-    if(pcm != NULL) {
-    printf("File %s opened!\n", pDirent->d_name);
-    fclose(pcm);
-    }
-    else {
-    printf("File could not be opened\n");
-    }*/
-
-    /*
-    cwd = opendir (argv[1]);
-    if (cwd == NULL) {
-        printf ("Cannot open directory '%s'\n", argv[1]);
-        return 1;
-    }
-
-    while ((pDirent = readdir(cwd)) != NULL) {
-        printf ("[%s]\n", pDirent->d_name);
-        if(strstr(pDirent->d_name, ".wav") != NULL) {
-            char *filepath = malloc(strlen(pDirent->d_name) + strlen(argv[1]) + 1);
-            strcpy(filepath, argv[1]);
-            strcat(filepath, "/");
-            strcat(filepath, pDirent->d_name);
-            printf("Filepath %s \n",  filepath);
-
-            FILE *pcm = fopen(filepath, "rb");
-            if(pcm != NULL) {
-                printf("File %s opened!\n", pDirent->d_name);
-                fclose(pcm);
-
-                char *help = getCwd(filepath, strlen(filepath));
-                printf("cwd %s\n", help);
-            } else {
-                printf("File could not be opened\n");
-            }
-
-        }
-    }
-    closedir (cwd);
-    exit(EXIT_SUCCESS);*/
-
-        /*int read, write;
-    
-        FILE *pcm = fopen("samples/s1.wav", "rb");
-        FILE *mp3 = fopen("output/s1.mp3", "wb");
-
-
-        if( pcm == NULL || mp3 == NULL) {
-            printf("Null\n");
-        }
-        else {
-            printf("wow\n");
-        }
-    
-        const int PCM_SIZE = 8192;
-        const int MP3_SIZE = 8192;
-    
-        short int pcm_buffer[PCM_SIZE*2];
-        unsigned char mp3_buffer[MP3_SIZE];
-    
-        lame_t lame = lame_init();
-        //lame_set_in_samplerate(lame, 44100);
-        lame_set_VBR(lame, vbr_default);
-        lame_set_quality(
-        lame_init_params(lame);
-    
-        do {
-            read = fread(pcm_buffer, 2*sizeof(short int), PCM_SIZE, pcm);
-            if (read == 0)
-                write = lame_encode_flush(lame, mp3_buffer, MP3_SIZE);
-            else
-                write = lame_encode_buffer_interleaved(lame, pcm_buffer, read, mp3_buffer, MP3_SIZE);
-            fwrite(mp3_buffer, write, 1, mp3);
-        } while (read != 0);
-    
-        lame_close(lame);
-        fclose(mp3);
-        fclose(pcm);
-    
-        return 0;*/
-    
+    return 0;
 }

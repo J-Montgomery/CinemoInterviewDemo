@@ -9,27 +9,22 @@
 
 
 filepath set_path(filepath dest, filepath src) {
-    if(dest.path_len <= src.path_len) {
+    if(dest.path_len < src.path_len || dest.path == NULL) {
         dest.path = realloc(dest.path, src.path_len);
-        dest.path_len = src.path_len;
     }
 
-    memcpy(dest.path, src.path, src.path_len);
-    dest.path[src.path_len] = 0;
+    snprintf(dest.path, src.path_len + 1, "%s", src.path);
+    dest.path_len = src.path_len;
 
     return dest;
 }
 
 filepath get_full_path(filepath dir, filepath file) {
-    size_t len = dir.path_len + file.path_len + 1;
+    size_t len = dir.path_len + file.path_len;
 
-    filepath full_path = { .path     = calloc(len, 1),
-                           .path_len = len - 1 };
-
-    strncat(full_path.path, dir.path,  dir.path_len);
-    strncat(full_path.path, file.path, file.path_len);
-    full_path.path[full_path.path_len] = '\0';
-
+    filepath full_path = { .path     = calloc(len + 1, 1),
+                           .path_len = len };
+    snprintf(full_path.path, full_path.path_len + 1, "%s%s", dir.path, file.path);
     return full_path;
 }
 
@@ -37,19 +32,20 @@ filepath normalize_filepath(filepath path) {
     if(path.path == NULL || path.path_len == 0)
         return (filepath) { NULL, 0 };
 
+    /* Normalizing by calling GetFullPathName or realpath would be better but significantly more complicated */
+    /* Instead we append a system-specific directory separator */
     size_t new_len = strlen(path.path);
 
     if(path.path[new_len - 1] != '\\') {
         if(path.path_len < (new_len + 1))
-            realloc(path.path, new_len + 1);
-        path.path[new_len] = '\0';
-        strncat(path.path, "\\", 1); // Normalize by appending a system-specific directory separator
+            realloc(path.path, new_len + 2);
+        path.path[new_len] = '\\';
+        path.path[new_len + 1] = '\0';
         new_len += 1;
-        
     }
+
     path.path_len = new_len;
 
-    /* In an ideal world, we would continue normalizing by calling GetFullPathName or realpath */
     return path;
 }
 
@@ -67,7 +63,6 @@ bool traverse_dir(filepath cwd, char *extension, callback cb) {
         printf("Cannot open directory '%s'\n", cwd.path);
         return FALSE;
     }
-    printf("MAX_PATH %li\nMAX_NAME %lu\n", INITIAL_SYS_PATH_LEN, getSystemNameMax(cwd.path));
 
     while((p_dir = readdir(dir)) != NULL) {
         if(match_extension(p_dir->d_name, extension)) {

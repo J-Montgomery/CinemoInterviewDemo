@@ -49,7 +49,6 @@
 
     int getNumCPUs(void);
     long int getSystemNameMax(char *filename);
-    char *getSystemRealPath(char *filename);
 
 
 /*****************************************************************************************
@@ -110,7 +109,6 @@
 
     
     int getNumCPUs(void);
-    char *getSystemRealPath(char *filename);
 
 #endif
 
