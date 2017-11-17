@@ -20,7 +20,7 @@ Requirements:
 #include <stdlib.h>
 
 #include <dirent.h>
-#include <lame.h>
+#include <lame/lame.h>
 
 #include <getopt.h>
 #include "system_shims.h"
@@ -278,7 +278,7 @@ void wav_file_found(filepath dir, filepath file, void *args) {
     if(sem.counter >= params.max_cores)
         pthread_cond_wait(&sem.cond_var, &sem.mutex);
 
-    pthread_create(&tid, convert_wav, t_params);
+    pthread_create(&tid, NULL, convert_wav, t_params);
     sem.counter++;
 
     pthread_mutex_unlock(&sem.mutex);
@@ -297,7 +297,7 @@ int main (int argc, char *argv[]) {
                           .max_cores   = getNumCPUs() };
 
     params.input_dir.path = getCwd(NULL, INITIAL_SYS_PATH_LEN); // getcwd() will malloc enough memory
-    params.input_dir.path_len = max(strlen(params.input_dir.path), INITIAL_SYS_PATH_LEN);
+    params.input_dir.path_len = MAX(strlen(params.input_dir.path), INITIAL_SYS_PATH_LEN);
 
     // Copy the dir over in case we receive no arguments on the command line
     params.output_dir = set_path(params.output_dir, params.input_dir);
@@ -333,8 +333,8 @@ int main (int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    pthread_mutex_init(&sem.mutex);
-    pthread_cond_init(&sem.cond_var);
+    pthread_mutex_init(&sem.mutex, NULL);
+    pthread_cond_init(&sem.cond_var, NULL);
 
     callback cb = { .func = &wav_file_found,
                     .args = &params };

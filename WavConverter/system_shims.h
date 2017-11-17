@@ -32,19 +32,19 @@
     #define pthread_t                    HANDLE
     #define pthread_attr_t               LPSECURITY_ATTRIBUTES
 
-    #define pthread_mutex_init(mutex)    InitializeCriticalSection((mutex))
-    #define pthread_mutex_destroy(mutex) DeleteCriticalSection((mutex))
+    #define pthread_mutex_init(mutex, attr) InitializeCriticalSection((mutex))
+    #define pthread_mutex_destroy(mutex)    DeleteCriticalSection((mutex))
 
-    #define pthread_mutex_lock(mutex)    EnterCriticalSection((mutex))
-    #define pthread_mutex_unlock(mutex)  LeaveCriticalSection((mutex))
+    #define pthread_mutex_lock(mutex)       EnterCriticalSection((mutex))
+    #define pthread_mutex_unlock(mutex)     LeaveCriticalSection((mutex))
 
-    #define pthread_cond_init(cv)        InitializeConditionVariable((cv))
+    #define pthread_cond_init(cv, attr)     InitializeConditionVariable((cv))
     #define pthread_cond_destroy(cv)     
 
-    #define pthread_cond_signal(cv)      WakeConditionVariable((cv))
-    #define pthread_cond_wait(cv, mutex) SleepConditionVariableCS((cv), (mutex), INFINITE)
+    #define pthread_cond_signal(cv)         WakeConditionVariable((cv))
+    #define pthread_cond_wait(cv, mutex)    SleepConditionVariableCS((cv), (mutex), INFINITE)
 
-    #define pthread_create(tid, f, arg) *tid = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)f, arg, 0, NULL)
+    #define pthread_create(tid, attr, f, arg) *tid = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)f, arg, 0, NULL)
 
     int getNumCPUs(void) {
         SYSTEM_INFO sysinfo;
@@ -64,12 +64,12 @@
     #define getCwd getcwd
 
     enum access_modes {
-        test_exist = F_OK, // 0
-        test_write = W_OK, // 2
-        test_read  = R_OK  // 4
+        test_existence = F_OK, // 0
+        test_write     = W_OK, // 2
+        test_read      = R_OK  // 4
     };
 
-    #define f_access(file, mode) access((x), (mode))
+    #define f_access(file, mode) access((file), (mode))
     
 
     #if defined(PATH_MAX)
