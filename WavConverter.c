@@ -209,39 +209,42 @@ void encode(filepath input, filepath output, int quality) {
 
     wav_header input_params = {0};
     int ret = parse_wav(&input_params, pcm);
-    printf("WAV ret %i channels %i sr %i bits %i\n", ret, input_params.n_channels, input_params.sample_rate, input_params.bits_per_sample);
-
+    
     if(ret) {
-        puts("Cannot parse WAV");
+        puts("Unsupported WAV settings");
         fclose(pcm);
         fclose(mp3);
         return;
     }
     
     int sample_size = input_params.bits_per_sample / 8;
-    // These would be better malloc'd on an MCU with a small stack
-    short int *pcm_buffer = malloc((PCM_SIZE * sample_size) * sizeof(short int));
-    unsigned char *mp3_buffer = malloc(MP3_SIZE * sizeof(unsigned char));
+    short int *pcm_buffer = calloc((PCM_SIZE * sample_size) * sizeof(short int), 1);
+    unsigned char *mp3_buffer = calloc(MP3_SIZE * sizeof(unsigned char), 1);
 
-    lame_t lame = lame_init(); // No need to check for null ptrs yet, the config functions check internally
+    lame_t lame = lame_init();
     lame_set_VBR(lame, vbr_default);
     lame_set_num_channels(lame,input_params.n_channels);
     lame_set_in_samplerate(lame,input_params.sample_rate);
+    lame_set_out_samplerate(lame, input_params.sample_rate);
+    if(input_params.n_channels == 1)
+        lame_set_mode(lame, 3); // Set encoder to mono
     lame_set_quality(lame, quality);
     int lame_success = lame_init_params(lame);
 
     if((lame_success < 0) || (pcm_buffer == NULL) || (mp3_buffer == NULL)) {
-        printf("Encoder failed to init %s\n", input.path);
+        printf("Encoder failed to init: %s\n", input.path);
         fclose(pcm);
         fclose(mp3);
         return;
     }
 
     do {
-        read = fread(pcm_buffer, 2*sizeof(short int), PCM_SIZE, pcm);
+        read = fread(pcm_buffer, input_params.n_channels*sizeof(short int), PCM_SIZE, pcm);
         if (read == 0)
             write = lame_encode_flush(lame, mp3_buffer, MP3_SIZE);
-        else
+        else if(input_params.n_channels == 1)
+            write = lame_encode_buffer(lame, pcm_buffer, NULL, read, mp3_buffer, MP3_SIZE);
+        else 
             write = lame_encode_buffer_interleaved(lame, pcm_buffer, read, mp3_buffer, MP3_SIZE);
         fwrite(mp3_buffer, write, 1, mp3);
     } while (read != 0);

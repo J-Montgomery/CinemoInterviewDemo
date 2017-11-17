@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=c99 -g -O2 -Wall -Werror
+CFLAGS=-std=c99 -g -O2 -Wall -Werror -Wno-unused
 
 all: WavConverter.exe
 
