@@ -28,10 +28,10 @@ Requirements:
 Libraries used: dirent.h, pthreads.h, getopt.h, libmp3lame
 
 Compilation notes on Windows:
-This code should compile on Windows. Do note that MSVS solution files are *not* inherently portable. Every attempt has been made to provide one that should work, but in case it does not all relevant libraries can be found in the \lib folder of the root directory. Windows-compatible ports of these libraries have been included in the project except for libmp3lame, for which only a statically linked .lib file compiled with /MT on MSVC has been provided.
+3 of the specific libraries used (dirent.h, pthreads.h, and getopt.h) are typically considered standard linux libraries and are not part of a default Windows SDK. Simple, windows-compatible ports of these libraries have been included in the project. libmp3lame's standard source release only compiles on x86 in VS2017 and so the VS solution has been limited to compiling in x86 mode for static linking. A .lib file compiled with /MT is provided within \lib\lame. The code should also compile in MinGW using the included makefile, but this has not been tested.
 
 Compilation notes for Linux:
-All libraries used are standard on Linux distributions except for libmp3lame.
+All libraries used are standard on Linux distributions except for libmp3lame. A makefile has been provided.
 
 Usage notes:
 
