@@ -133,17 +133,9 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
     int opt;
     int sync_out_dir = 1;
 
-    while(optind < argc) {
-        opt = getopt_long(argc, argv, "huvo:q:n:", opts, NULL);
-        if(opt == -1) { // Handle non-option arguments (esp. input dir)
-            filepath opt_dir = { argv[optind], strlen(argv[optind]) };
-            params->input_dir = set_path(params->input_dir, opt_dir);
-
-            if(sync_out_dir) // We want to sync input & output dirs if -o isn't explicitly set
-                params->output_dir = set_path(params->output_dir, params->input_dir);
-            optind++;
-        }
-        else {
+    while(1) {
+        opt = getopt_long(argc, argv, "hvo:q:n:", opts, NULL);
+        if(opt != -1) {
             switch(opt) {
             case 'h':
             case 'u':
@@ -156,7 +148,6 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
                 break;
             case 'o':
             {
-                printf("-o %s\n", optarg);
                 filepath opt_dir = { optarg, strlen(optarg) };
                 params->output_dir = set_path(params->output_dir, opt_dir);
                 sync_out_dir = 0;
@@ -177,7 +168,7 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
             case 'n':
             {
                 int max_threads = atoi(optarg);
-                if(max_threads && (max_threads < params->max_cores)) // test for sane values
+                if(max_threads && (max_threads < 2*params->max_cores)) // test for sane values
                     params->max_cores = max_threads;
                 break;
             }
@@ -192,8 +183,20 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
             default:
                 break;
             }
-        }        
+        }
+        else
+            break;      
     }
+
+    if(optind < argc) { // Handle non-option arguments (esp. input dir)
+        printf("optdir %s\n", argv[optind]);
+        filepath opt_dir = { argv[optind], strlen(argv[optind]) };
+        params->input_dir = set_path(params->input_dir, opt_dir);
+
+        if(sync_out_dir) // We want to sync input & output dirs if -o isn't explicitly set
+            params->output_dir = set_path(params->output_dir, params->input_dir);
+        optind++;
+    }  
 }
 
 /*****************************************************************************************
@@ -278,10 +281,10 @@ void wav_file_found(filepath dir, filepath file, void *args) {
     if(sem.counter >= params.max_cores)
         pthread_cond_wait(&sem.cond_var, &sem.mutex);
 
+    pthread_mutex_unlock(&sem.mutex);
     pthread_create(&tid, NULL, convert_wav, t_params);
     sem.counter++;
-
-    pthread_mutex_unlock(&sem.mutex);
+    
 }
 
 /*****************************************************************************************

@@ -70,7 +70,6 @@
     };
 
     #define f_access(file, mode) access((file), (mode))
-    
 
     #if defined(PATH_MAX)
         #define INITIAL_SYS_PATH_LEN PATH_MAX
@@ -81,6 +80,8 @@
     int getNumCPUs(void) {
         return sysconf(_SC_NPROCESSORS_ONLN);
     }
+
+    
 
 #endif
 

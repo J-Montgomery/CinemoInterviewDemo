@@ -2,9 +2,16 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #include <dirent.h>
 #include "filesystem_access.h"
+
+#if defined(_WIN32)
+    #define SYS_PATH_SEPARATOR '\\'
+#else
+    #define SYS_PATH_SEPARATOR '/'
+#endif
 
 
 filepath set_path(filepath dest, filepath src) {
@@ -35,11 +42,11 @@ filepath normalize_filepath(filepath path) {
     /* Instead we append a system-specific directory separator */
     size_t new_len = strlen(path.path);
 
-    if(path.path[new_len - 1] != '\\') {
+    if(path.path[new_len - 1] != SYS_PATH_SEPARATOR) {
         if(path.path_len < (new_len + 1))
-            realloc(path.path, new_len + 2);
+            path.path = realloc(path.path, new_len + 2);
 
-        path.path[new_len] = '\\';
+        path.path[new_len] = SYS_PATH_SEPARATOR;
         path.path[new_len + 1] = '\0';
         new_len += 1;
     }
@@ -49,7 +56,7 @@ filepath normalize_filepath(filepath path) {
     return path;
 }
 
-bool match_extension(char *filename, char *extension) {
+int match_extension(char *filename, char *extension) {
     return (strstr(filename, extension) != NULL);
 }
 
@@ -60,15 +67,15 @@ bool traverse_dir(filepath cwd, char *extension, callback cb) {
     dir = opendir(cwd.path);
     if(dir == NULL) {
         printf("Cannot open directory '%s'\n", cwd.path);
-        return FALSE;
+        return false;
     }
 
     while((p_dir = readdir(dir)) != NULL) {
         if(match_extension(p_dir->d_name, extension)) {
-            cb.func(cwd, (filepath) { p_dir->d_name, p_dir->d_namlen }, cb.args);
+            cb.func(cwd, (filepath) { p_dir->d_name, strlen(p_dir->d_name) }, cb.args);
         }
     }
     closedir(dir);
 
-    return TRUE;
+    return true;
 }
