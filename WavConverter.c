@@ -37,14 +37,26 @@ Requirements:
 #define PCM_SIZE      (8192)
 #define MP3_SIZE      (8192)
 
-/*****************************************************************************************
- * Structs and types
- ****************************************************************************************/
 enum quality_lvl {
     OPTIMIZE_QUALITY_HIGH = 2,
     OPTIMIZE_QUALITY_MID = 5,
     OPTIMIZE_QUALITY_LOW = 7
 };
+
+typedef struct parameters_t {
+    filepath input_dir;
+    filepath output_dir;
+
+    int   quality_lvl;
+    int   max_cores;
+} parameters;
+
+typedef struct thread_args_t {
+    filepath in_file;
+    filepath out_file;
+
+    int quality;
+} thread_args;
 
 struct option opts[] = {
     {"help",        no_argument, 0, 'h'},
@@ -56,21 +68,6 @@ struct option opts[] = {
     {0, 0, 0, 0}
   };
 
-typedef struct parameters {
-    filepath input_dir;
-    filepath output_dir;
-
-    int   quality_lvl;
-    int   max_cores;
-} parameters;
-
-typedef struct thread_args {
-    filepath in_file;
-    filepath out_file;
-
-    int quality;
-} thread_args;
-
 /*! A straight semaphore would be less clear than this struct */
 struct sync_block {
     pthread_mutex_t mutex;
@@ -78,9 +75,6 @@ struct sync_block {
     int counter;
 };
 
-/*****************************************************************************************
-* Globals
-****************************************************************************************/
 struct sync_block sem = { .counter = 0 };
 char *executable_name;
 
@@ -98,7 +92,7 @@ void *convert_wav(void *arg);
 void wav_file_found(filepath dir, filepath file, void *args);
 
 /*****************************************************************************************
- * Parameter parsing Functions
+ * Parameter parsing
  ****************************************************************************************/
 void usage(void) {
     printf("\
@@ -213,12 +207,26 @@ void encode(filepath input, filepath output, int quality) {
         return;
     }
 
+    wav_header input_params = {0};
+    int ret = parse_wav(&input_params, pcm);
+    printf("WAV ret %i channels %i sr %i bits %i\n", ret, input_params.n_channels, input_params.sample_rate, input_params.bits_per_sample);
+
+    if(ret) {
+        puts("Cannot parse WAV");
+        fclose(pcm);
+        fclose(mp3);
+        return;
+    }
+    
+    int sample_size = input_params.bits_per_sample / 8;
     // These would be better malloc'd on an MCU with a small stack
-    short int *pcm_buffer = calloc(2 * PCM_SIZE, sizeof(short int));
-    unsigned char *mp3_buffer = calloc(MP3_SIZE, sizeof(short int));
+    short int *pcm_buffer = malloc((PCM_SIZE * sample_size) * sizeof(short int));
+    unsigned char *mp3_buffer = malloc(MP3_SIZE * sizeof(unsigned char));
 
     lame_t lame = lame_init(); // No need to check for null ptrs yet, the config functions check internally
     lame_set_VBR(lame, vbr_default);
+    lame_set_num_channels(lame,input_params.n_channels);
+    lame_set_in_samplerate(lame,input_params.sample_rate);
     lame_set_quality(lame, quality);
     int lame_success = lame_init_params(lame);
 
@@ -230,13 +238,13 @@ void encode(filepath input, filepath output, int quality) {
     }
 
     do {
-        read = fread(pcm_buffer, 2 * sizeof(short int), PCM_SIZE, pcm);
-        if(read != 0)
-            write = lame_encode_buffer_interleaved(lame, pcm_buffer, read, mp3_buffer, MP3_SIZE);
-        else
+        read = fread(pcm_buffer, 2*sizeof(short int), PCM_SIZE, pcm);
+        if (read == 0)
             write = lame_encode_flush(lame, mp3_buffer, MP3_SIZE);
+        else
+            write = lame_encode_buffer_interleaved(lame, pcm_buffer, read, mp3_buffer, MP3_SIZE);
         fwrite(mp3_buffer, write, 1, mp3);
-    } while(read != 0);
+    } while (read != 0);
 
     lame_mp3_tags_fid(lame, mp3);
     lame_close(lame);
@@ -273,7 +281,7 @@ void *convert_wav(void *arg)
 void wav_file_found(filepath dir, filepath file, void *args) {
     parameters params = *(parameters *)args;
 
-    struct thread_args *t_params = malloc(sizeof(thread_args)); // This will be freed by the spawned thread
+    thread_args *t_params = malloc(sizeof(thread_args)); // This will be freed by the spawned thread
     if(t_params == NULL) {
         puts("Could not start thread");
         return;
