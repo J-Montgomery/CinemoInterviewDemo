@@ -24,9 +24,6 @@
     <ClCompile Include="WavConverter.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\lib\getopt\getopt.c">
-      <Filter>getopt</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="filesystem_access.h">

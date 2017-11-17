@@ -13,8 +13,6 @@ Requirements:
     (9) the LAME encoder should be used with reasonable standard settings (e.g. quality based encoding with quality level "good") 
 */
 
-#define _CRT_SECURE_NO_WARNINGS
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
