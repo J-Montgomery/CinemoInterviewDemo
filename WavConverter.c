@@ -87,7 +87,7 @@ void version(char *name, char *version, char *license, char *author);
 void parseOpts(parameters *params, int argc, char *argv[]);
 
 /* Misc. function prototypes */
-void encode(filepath input, filepath output, int quality);
+void encode(FILE *pcm, FILE *mp3, int quality);
 void *convert_wav(void *arg);
 void wav_file_found(filepath dir, filepath file, void *args);
 
@@ -196,24 +196,14 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
 * Encoding Functions
 ****************************************************************************************/
 //! Transcode the input WAV into an MP3 file in the output directory
-void encode(filepath input, filepath output, int quality) {
+void encode(FILE *pcm, FILE *mp3, int quality) {
     int read, write;
-
-    FILE *pcm = fopen(input.path, "rb");
-    FILE *mp3 = fopen(output.path, "wb+");
-
-    if(pcm == NULL || mp3 == NULL) {
-        printf("Could not open files\n");
-        return;
-    }
 
     wav_header input_params = {0};
     int ret = parse_wav(&input_params, pcm);
     
     if(ret) {
         puts("Unsupported WAV settings");
-        fclose(pcm);
-        fclose(mp3);
         return;
     }
     
@@ -232,9 +222,7 @@ void encode(filepath input, filepath output, int quality) {
     int lame_success = lame_init_params(lame);
 
     if((lame_success < 0) || (pcm_buffer == NULL) || (mp3_buffer == NULL)) {
-        printf("Encoder failed to init: %s\n", input.path);
-        fclose(pcm);
-        fclose(mp3);
+        puts("Encoder failed to init");
         return;
     }
 
@@ -252,9 +240,6 @@ void encode(filepath input, filepath output, int quality) {
     lame_mp3_tags_fid(lame, mp3);
     lame_close(lame);
 
-    fclose(mp3);
-    fclose(pcm);
-
     free(pcm_buffer);
     free(mp3_buffer);
 }
@@ -265,17 +250,29 @@ void *convert_wav(void *arg)
     thread_args *args = arg;
 
     printf("encoding %s\n", args->out_file.path);
-    encode(args->in_file, args->out_file, args->quality);
+    FILE *in_file = fopen(args->in_file.path, "rb");
+    FILE *out_file = fopen(args->out_file.path, "wb+");
+    int quality = args->quality;
+
+    free(args->in_file.path);
+    free(args->out_file.path);
+    free(args);
+
+    if(in_file == NULL || out_file == NULL) {
+        printf("Could not open files\n");
+        return NULL;
+    }
+    
+    encode(in_file, out_file, quality);
 
     pthread_mutex_lock(&sem.mutex);
     sem.counter--;
     pthread_cond_signal(&sem.cond_var);
     pthread_mutex_unlock(&sem.mutex);
 
-    free(args->in_file.path);
-    free(args->out_file.path);
-    free(args); // Avoid memory leaks
-    return 0;
+    fclose(out_file);
+    fclose(in_file);    
+    return NULL;
 }
 
 /*! For every WAV found, spawn a thread to transcode it. If too many threads are currently running, block until we can
@@ -284,7 +281,7 @@ void *convert_wav(void *arg)
 void wav_file_found(filepath dir, filepath file, void *args) {
     parameters params = *(parameters *)args;
 
-    thread_args *t_params = malloc(sizeof(thread_args)); // This will be freed by the spawned thread
+    thread_args *t_params = malloc(sizeof(thread_args)); // This will be freed by the child thread
     if(t_params == NULL) {
         puts("Could not start thread");
         return;

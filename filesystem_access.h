@@ -25,7 +25,7 @@ typedef struct wav_header_t {
     uint8_t  format[4];              // "WAVE"
 	uint8_t  subchunk_id[4];         // "fmt "
 	uint32_t subchunk_len;           // length of the format data
-	uint16_t format_type;            // format type. 1-PCM, 3- IEEE float, 6 - 8bit A law, 7 - 8bit mu law
+	uint16_t format_type;            // format type. 1 - PCM, 3 - IEEE float, 6 - 8bit A law, 7 - 8bit mu law
 	uint16_t n_channels;             // no.of channels
 	uint32_t sample_rate;            // sampling rate (blocks per second)
 	uint32_t byte_rate;              // sample_rate * n_channels * bits_per_sample/8
@@ -50,9 +50,8 @@ int match_extension(char *file, char *extension);
 //! Iterate over a directory, calling cb.func with cb.args when a file is found with the specified extension
 bool traverse_dir(filepath cwd, char *extension, callback cb);
 
-
-
-
+//! Parse the WAV format header and point fseek at the PCM-encoded data. Will return false
+//! if no errors are found and true otherwise.
 bool parse_wav(wav_header *params, FILE *wav);
 
 #endif /* FILESYSTEM_ACCESS_H_ */

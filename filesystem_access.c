@@ -105,16 +105,16 @@ bool traverse_dir(filepath cwd, char *extension, callback cb) {
 bool parse_wav(wav_header *params, FILE *wav) {
     int errors = 0;
     int f_ret = fread(params, 1, sizeof(wav_header), wav);
-    errors += (f_ret != 0);
+    
+    errors += (f_ret < sizeof(wav_header));
     errors += (memcmp(&params->chunk_id   , "RIFF", 4) != 0);
     errors += (memcmp(&params->format     , "WAVE", 4) != 0);
     errors += (memcmp(&params->subchunk_id, "fmt ", 4) != 0);
-    errors += (params->format_type != 1);
 
     if(!errors) {
         fseek(wav, params->subchunk_len + 28, SEEK_SET);
-        return true;
+        return false;
     }
     else 
-        return false;
+        return true;
 }
