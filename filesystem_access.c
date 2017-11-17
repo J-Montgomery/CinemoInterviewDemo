@@ -76,7 +76,10 @@ char *get_ext(char *filename) {
 
 int match_extension(char *filename, char *extension) {
     char *file_ext = get_ext(filename);
-    return (lc_strstr(file_ext, extension) == 0); // case-insensitive comparison
+    if(file_ext != NULL)
+        return (lc_strstr(file_ext, extension) == 0); // case-insensitive comparison
+    else
+        return 0;
 }
 
 bool traverse_dir(filepath cwd, char *extension, callback cb) {

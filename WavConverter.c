@@ -189,7 +189,6 @@ void parseOpts(parameters *params, int argc, char *argv[]) {
     }
 
     if(optind < argc) { // Handle non-option arguments (esp. input dir)
-        printf("optdir %s\n", argv[optind]);
         filepath opt_dir = { argv[optind], strlen(argv[optind]) };
         params->input_dir = set_path(params->input_dir, opt_dir);
 
@@ -329,12 +328,6 @@ int main (int argc, char *argv[]) {
     params.input_dir = normalize_filepath(params.input_dir);
     params.output_dir = normalize_filepath(params.output_dir);
 
-    printf("\
-    parameters params = {.input_dir   = %s,\n\
-                         .output_dir  = %s,\n\
-                         .quality_lvl = %i,\n\
-                         .max_cores   = %i };\n", params.input_dir.path, params.output_dir.path, params.quality_lvl, params.max_cores);
-
     int i_exist = f_access(params.input_dir.path, test_existence);
     int o_exist = f_access(params.output_dir.path, test_existence);
 
@@ -343,10 +336,6 @@ int main (int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     } else if(o_exist == -1) { 
         printf("Output dir %s does not exist\n", params.output_dir.path);
-        exit(EXIT_FAILURE);
-    }
-    else if(errno != 0) { // Handle any misc. errors that may have occurred during initialization
-        puts("Unknown Errors");
         exit(EXIT_FAILURE);
     }
 
