@@ -124,13 +124,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="filesystem_access.c" />
-    <ClCompile Include="WavConverter.c" />
+    <ClInclude Include="..\filesystem_access.h" />
+    <ClInclude Include="..\lib\getopt\getopt.h" />
+    <ClInclude Include="..\system_shims.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\lib\getopt\getopt.h" />
-    <ClInclude Include="filesystem_access.h" />
-    <ClInclude Include="system_shims.h" />
+    <ClCompile Include="..\filesystem_access.c" />
+    <ClCompile Include="..\WavConverter.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
